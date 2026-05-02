@@ -1,0 +1,5 @@
+cd desktop\ルーレット
+
+py -m streamlit run app.py
+
+py -m streamlit run add.py
