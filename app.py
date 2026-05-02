@@ -2,22 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import random
-import time
-from supabase import create_client, Client
+import os
+import time  
 
-# --- Supabase接続設定 ---
-# 自身のプロジェクトのURLとキーに書き換えてください
-SUPABASE_URL = "YOUR_SUPABASE_URL"
-SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
-
-@st.cache_resource
-def init_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-supabase = init_supabase()
-
-# --- 基本設定 ---
 JST = timezone(timedelta(hours=+9), 'JST')
+LOG_FILE = "ルーレッツ.csv"
+chat_file = "chatlog.csv"
+
+# 追加：駅名のリスト
 STATIONS = ["今治", "松山", "琴平", "大歩危", "宇和島", "窪川", "高松", "高知", "徳島"]
 
 st.set_page_config(page_title="レッツルーレッツ", layout="centered", page_icon="🎲")
@@ -25,8 +17,7 @@ st.set_page_config(page_title="レッツルーレッツ", layout="centered", pag
 st.markdown("""
     <style>
     .big-font { font-size:50px !important; font-weight: bold; color: #ffffff; }
-    .station-font { font-size:40px !important; color: #FFEB3B; font-weight: bold; }
-    .system-msg { background-color: #f0f2f6; color: #555555; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; border: 1px solid #e0e0e0; text-align: center; }
+    .station-font { font-size:30px !important; color: #FFEB3B; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -34,8 +25,9 @@ st.title("澤村拓一の宇宙開発")
 
 if 'user_name' not in st.session_state:
     st.session_state.user_name = ""
+if 'last_result' not in st.session_state:
+    st.session_state.last_result = None
 
-# --- ログイン処理 ---
 if not st.session_state.user_name:
     st.info("最初に班名と現在の駅を登録してください")
     with st.form("login_form"):
@@ -49,120 +41,125 @@ if not st.session_state.user_name:
                 st.warning("名前を入力しろ")
 
 else:
-    # サイドバー
-    st.sidebar.write(f"👤 ログイン中: **{st.session_state.user_name}**")
+    try:
+        st.sidebar.image("epstein.jpg", width=100) 
+    except:
+        st.sidebar.write("👤")
+    
+    st.sidebar.write(f"ログイン中: **{st.session_state.user_name}**")
+
     if st.sidebar.button("ログアウト"):
         st.session_state.user_name = ""
         st.rerun()
 
-    tab1, tab2 = st.tabs(["🚀 開発センター", "💬 掲示板"])
+    tab1, tab2 = st.tabs(["🚀 NASA", "💬 掲示板"])
 
     with tab1:
-        col1, col2 = st.columns(2)
-        with col1:
+        try:
+            st.image("sawamura.jpeg", width=200, caption="担当:澤村拓一")
+        except:
+            st.error("画像ファイル'sawamura.jpeg'が見つかりません。")
+
+        if st.button("🚀宇宙開発(まわす)", use_container_width=True):
+            cut_in_container = st.empty() 
             try:
-                st.image("sawamura.jpeg", use_container_width=True, caption="担当:澤村拓一")
+                gif_path = "sawamura.gif"
+                cut_in_container.image(gif_path, use_container_width=True)
+                time.sleep(1.4) 
+                cut_in_container.empty()
             except:
-                st.write("👤 画像なし")
+                st.warning("カットイン（GIF）が見つかりません。")
 
-        # --- ボタン共通処理用関数 ---
-        def save_and_notify(action_type, result_val):
-            # 5.gif の演出
-            cut_in = st.empty()
-            try:
-                cut_in.image("5.gif", use_container_width=True)
-                time.sleep(1.3)
-                cut_in.empty()
-            except: pass
-
-            now = datetime.now(JST)
+            # 出目と駅をランダムに決定
+            result = random.randint(1, 6)
+            selected_station = random.choice(STATIONS) # ランダム駅選出
             
-            # Supabaseへログ保存
-            try:
-                supabase.table("dice_logs").insert({
-                    "user_name": st.session_state.user_name,
-                    "item": action_type,
-                    "result": str(result_val)
-                }).execute()
+            st.session_state.last_result = result 
+            now = datetime.now(JST)
+            time_stamp = now.strftime("%Y/%m/%d %H:%M:%S") 
+            time_stamp_chat_display = now.strftime("%H:%M") 
 
-                # チャット掲示板へシステムメッセージを流す
-                icon = "🎲" if action_type == "サイコロ" else "📍"
-                chat_msg = f"""
-                <div style="display: flex; justify-content: center; margin: 5px 0;">
-                    <div class="system-msg">
-                        📢 {now.strftime("%H:%M")} | {st.session_state.user_name} が {action_type}を実行： <b>{icon} {result_val}</b>
-                    </div>
+            # ログに駅名を追加
+            new_log = {
+                "発生時刻": [time_stamp],
+                "開発者": [st.session_state.user_name],
+                "出目": [f"🎲 {result}"],
+                "目的地": [selected_station]
+            }
+            pd.DataFrame(new_log).to_csv(LOG_FILE, index=False, header=not os.path.exists(LOG_FILE), mode='a', encoding='utf_8_sig')
+            
+            # チャット用メッセージ（駅名を追加）
+            dice_msg = f"""
+            <div style="display: flex; justify-content: center; margin: 10px 0;">
+                <div style="background-color: #f0f2f6; color: #555555; padding: 10px 15px; border-radius: 20px; font-size: 0.85em; border: 1px solid #e0e0e0; text-align: center;">
+                    📢 {time_stamp_chat_display} | {st.session_state.user_name}<br>
+                    <span style="font-size: 1.2em; font-weight: bold;">🎲 {result} ／ 📍 {selected_station}</span>
                 </div>
-                """
-                supabase.table("chat_logs").insert({
-                    "user_name": "SYSTEM",
-                    "message": chat_msg
-                }).execute()
-            except Exception as e:
-                st.error(f"DBエラー: {e}")
+            </div>
+            """
+            new_chat_post = {
+                "時刻": [now.strftime("%Y/%m/%d %H:%M")],
+                "名前": ["SYSTEM"], 
+                "メッセージ": [dice_msg]
+            }
+            pd.DataFrame(new_chat_post).to_csv(chat_file, index=False, header=not os.path.exists(chat_file), mode='a', encoding='utf_8_sig')
 
-            return result_val
-
-        # --- ボタン配置 ---
-        btn_col1, btn_col2 = st.columns(2)
-        
-        with btn_col1:
-            if st.button("🎲 サイコロを振る", use_container_width=True, type="primary"):
-                res = save_and_notify("サイコロ", random.randint(1, 6))
-                st.markdown(f'<p class="big-font">🎲 {res}</p>', unsafe_allow_html=True)
-
-        with btn_col2:
-            if st.button("📍 目的地を決定", use_container_width=True):
-                res = save_and_notify("目的地", random.choice(STATIONS))
-                st.markdown(f'<p class="station-font">📍 {res}</p>', unsafe_allow_html=True)
+            # 画面表示
+            st.markdown(f'<p class="big-font">出目：{result}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="station-font">目的地：{selected_station}</p>', unsafe_allow_html=True)
+            st.success(f"【{time_stamp}】に記録しました")
 
         st.divider()
-        st.subheader("履歴一覧（最新50件）")
-        try:
-            response = supabase.table("dice_logs").select("*").order("created_at", desc=True).limit(50).execute()
-            if response.data:
-                df = pd.DataFrame(response.data)
-                # 表示用に整理
-                df_disp = df[['created_at', 'user_name', 'item', 'result']].rename(columns={
-                    'created_at': '発生時刻', 'user_name': '開発者', 'item': '項目', 'result': '結果'
-                })
-                st.dataframe(df_disp, use_container_width=True, height=250)
-            else:
-                st.write("履歴なし")
-        except:
-            st.write("履歴の取得に失敗しました")
+        st.subheader("履歴一覧（最新順）")
+        if os.path.exists(LOG_FILE):
+            try:
+                df_log = pd.read_csv(LOG_FILE)
+                if not df_log.empty:
+                    st.dataframe(df_log.iloc[::-1], use_container_width=True, height=300)
+                    csv = df_log.to_csv(index=False).encode('utf_8_sig')
+                    st.download_button(
+                        label="履歴ファイルを保存 (CSV)",
+                        data=csv,
+                        file_name=f"dice_history_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                    )
+            except Exception as e:
+                st.error(f"ログの読み込みに失敗しました: {e}")
+        else:
+            st.write("まだ履歴はありません。")
 
     with tab2:
         st.subheader("💬 掲示板")
-        c_user = st.text_input("名前", value=st.session_state.user_name)
-        c_msg = st.text_area("メッセージ", height=100)
+        chat_user = st.text_input("名前", value="", placeholder="風吹けばベーデン・パウエル")
+        chat_message = st.text_area("メッセージ", placeholder="書き込み内容を入力してください", height=100)
         
         if st.button("書き込む", use_container_width=True):
-            if c_user and c_msg:
-                try:
-                    supabase.table("chat_logs").insert({
-                        "user_name": c_user,
-                        "message": c_msg.replace('\n', ' ')
-                    }).execute()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"送信失敗: {e}")
+            if not chat_user:
+                st.error("名前を入力してから送信")
+            elif not chat_message:
+                st.warning("内容がないよう")
+            else:
+                now_chat = datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+                new_post = {
+                    "時刻": [now_chat],
+                    "名前": [chat_user],
+                    "メッセージ": [chat_message.replace('\n', ' ')] 
+                }
+                pd.DataFrame(new_post).to_csv(chat_file, index=False, header=not os.path.exists(chat_file), mode='a', encoding='utf_8_sig')
+                st.rerun()
 
         st.divider()
-        chat_container = st.container(height=500) 
+        st.write("▼ 掲示板ログ")
+        chat_container = st.container(height=600) 
         with chat_container:
-            try:
-                chat_res = supabase.table("chat_logs").select("*").order("created_at", desc=True).limit(100).execute()
-                for row in chat_res.data:
-                    # 時刻の変換
-                    dt = datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')).astimezone(JST)
-                    time_str = dt.strftime("%Y/%m/%d %H:%M")
-
-                    if "<div" in str(row['message']):
-                        st.markdown(row['message'], unsafe_allow_html=True)
+            if os.path.exists(chat_file):
+                df_chat_log = pd.read_csv(chat_file)
+                for i, row in df_chat_log.iloc[::-1].iterrows():
+                    if "<div" in str(row['メッセージ']):
+                        st.markdown(row['メッセージ'], unsafe_allow_html=True)
                     else:
-                        st.markdown(f"**{row['user_name']}** <small style='color:gray'>{time_str}</small>", unsafe_allow_html=True)
-                        st.write(row['message'])
+                        st.markdown(f"{i+1} ：**{row['名前']}** ：{row['時刻']}")
+                        st.write(row['メッセージ'])
                         st.markdown("---")
-            except:
+            else:
                 st.write("まだ書き込みはありません。")
